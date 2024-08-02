@@ -22,6 +22,7 @@ version = "0.51.1"
 clap = { version = "4.4.7", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8.6"
+hex = "0.4"
 
 # [workspace]
 

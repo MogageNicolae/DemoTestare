@@ -2,7 +2,6 @@
 
 use multiversx_sc::derive_imports::*;
 use multiversx_sc::imports::*;
-
 #[type_abi]
 #[derive(TopEncode, TopDecode, Debug)]
 pub struct Offer<M: ManagedTypeApi> {
@@ -106,7 +105,6 @@ pub trait NftEscrowContract {
         let offer = offers_mapper.get();
 
         let caller = self.blockchain().get_caller();
-
         require!(offer.wanted_address == caller, "Can not accept this offer");
 
         let payment = self.call_value().single_esdt();

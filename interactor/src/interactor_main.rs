@@ -215,7 +215,26 @@ impl ContractInteract {
 
     }
 
-    async fn accept(&mut self, token_id: String, token_nonce: u64, token_amount: BigUint<StaticApi>, offer_id: u32) {
+    async fn accept_success(&mut self, token_id: String, token_nonce: u64, token_amount:  BigUint<StaticApi>, offer_id: u32) {
+        let user = self.interactor.register_wallet(test_wallets::bob());
+        let response = self
+            .interactor
+            .tx()
+            .from(user)
+            .to(self.state.current_address())
+            .gas(NumExpr("30,000,000"))
+            .typed(proxy::NftEscrowContractProxy)
+            .accept(offer_id)
+            .payment((TokenIdentifier::from(token_id.as_str()), token_nonce, BigUint::from(token_amount)))
+            .returns(ReturnsResultUnmanaged)
+            .prepare_async()
+            .run()
+            .await;
+
+        println!("Result: {response:?}");
+    }
+
+    async fn accept_fail(&mut self, token_id:  String, token_nonce: u64, token_amount:  BigUint<StaticApi>, offer_id: u32, expected_result: ExpectError<'_>) {
         let response = self
             .interactor
             .tx()
@@ -224,8 +243,28 @@ impl ContractInteract {
             .gas(NumExpr("30,000,000"))
             .typed(proxy::NftEscrowContractProxy)
             .accept(offer_id)
-            .payment((TokenIdentifier::from(token_id.as_str()), token_nonce, token_amount))
-            .returns(ReturnsResultUnmanaged)
+            .payment((TokenIdentifier::from(token_id.as_str()), token_nonce, BigUint::from(token_amount)))
+            .returns(expected_result)
+            .prepare_async()
+            .run()
+            .await;
+
+        println!("Result: {response:?}");
+    }
+
+    async fn accept_fail_address(&mut self, token_id: String, token_nonce: u64, token_amount:u128, offer_id: u32, expected_result: ExpectError<'_>) {
+        //let wallet_address = self.interactor.register_wallet(test_wallets::bob());
+        let user = self.interactor.register_wallet(test_wallets::alice());
+        let response = self
+            .interactor
+            .tx()
+            .from(user)
+            .to(self.state.current_address())
+            .gas(NumExpr("30,000,000"))
+            .typed(proxy::NftEscrowContractProxy)
+            .accept(offer_id)
+            .payment((TokenIdentifier::from(token_id.as_str()), token_nonce, BigUint::from(token_amount)))
+            .returns(expected_result)
             .prepare_async()
             .run()
             .await;
@@ -390,6 +429,90 @@ async fn test_escrow_success() {
     interact.get_created_offers(ivan_address).await;
     interact.get_wanted_offers(wanted_address).await;
 }
+
+#[tokio::test]
+async fn test_accept_fail_offer_does_not_exist(){
+    let mut interact = ContractInteract::new().await;
+    interact.deploy().await;
+    let token_id = String::from(TOKEN_ID);
+    let token_nonce = 1u64;
+    let token_amount =  BigUint::<StaticApi>::from(2u128);
+    let offer_id = 9999;
+    interact.accept_fail(token_id, token_nonce, token_amount, offer_id, ExpectError(4, "Offer does not exist")).await;
+}
+
+#[tokio::test]
+async fn test_unauthorized_acceptance() {
+    let mut interact = ContractInteract::new().await;
+    interact.deploy().await;
+    let token_id = String::from(TOKEN_ID);
+    let token_nonce = 1u64;
+    let token_amount = BigUint::<StaticApi>::from(1u128);
+    let wanted_nft = TokenIdentifier::<StaticApi>::from_esdt_bytes(&b"MICE-9e007a"[..]);
+    let wanted_nonce = 106u64;
+    let unauthorized_wallet_address = Bech32Address::from_bech32_string(String::from("erd1qyu5wthldzr8wx5c9ucg8kjagg0jfs53s8nr3zpz3hypefsdd8ssycr6th"));
+    let ref wanted_address = Bech32Address::from_bech32_string(String::from("erd1spyavw0956vq68xj8y4tenjpq2wd5a9p2c6j8gsz7ztyrnpxrruqzu66jx"));
+    let offer_id = interact.escrow_succes(
+        token_id.clone(), token_nonce, token_amount.clone(), wanted_nft, wanted_nonce, wanted_address
+    ).await;
+
+    println!("Offer id: {offer_id}");
+
+   // interact.wallet_address = interact.interactor.register_wallet(test_wallets::bob());
+
+    let expected_error = ExpectError(4, "Can not accept this offer");
+    interact
+        .accept_fail(
+           token_id, token_nonce, token_amount, offer_id, expected_error
+        )
+        .await;
+}
+
+#[tokio::test]
+async fn test_nft_does_not_match() {
+    let mut interact = ContractInteract::new().await;
+    interact.deploy().await;
+    let token_id =  String::from(TOKEN_ID);
+    let token_nonce = 1u64;
+    let token_amount =BigUint::<StaticApi>::from(1u128);
+    let wanted_nft =   TokenIdentifier::<StaticApi>::from_esdt_bytes(&"INTERNS-c9325f"[..]);
+    let wanted_nonce = 1u64;
+    let wanted_address = Bech32Address::from_bech32_string(String::from("erd1qyu5wthldzr8wx5c9ucg8kjagg0jfs53s8nr3zpz3hypefsdd8ssycr6th"));
+    let offer_id = interact.escrow_succes(
+        token_id.clone(), token_nonce, token_amount, wanted_nft.clone(), wanted_nonce, &wanted_address
+    ).await;
+
+
+    println!("Offer id: {}", offer_id); 
+    let token_amount = 2u128;
+    let expected_error = ExpectError(4, "NFT does not match");
+    interact
+        .accept_fail_address(
+            token_id, token_nonce, token_amount, offer_id, expected_error
+        ).await;
+}
+#[tokio::test]
+async fn test_accept_success() {
+    let mut interact = ContractInteract::new().await;
+    interact.deploy().await;
+    let token_id =  String::from(TOKEN_ID);
+    let token_nonce = 1u64;
+    let token_amount =BigUint::<StaticApi>::from(1u128);
+    let wanted_nft = TokenIdentifier::<StaticApi>::from_esdt_bytes(&"MICE-9e007a"[..]);
+    let wanted_nonce = 2u64;
+    let wanted_address = Bech32Address::from_bech32_string(String::from("erd1spyavw0956vq68xj8y4tenjpq2wd5a9p2c6j8gsz7ztyrnpxrruqzu66jx"));
+    let offer_id = interact.escrow_succes(
+        token_id.clone(), token_nonce, token_amount.clone(), wanted_nft.clone(), wanted_nonce, &wanted_address
+    ).await;
+    println!("Offer id: {}", offer_id); 
+
+    let expected_error = ExpectError(4, "NFT does not match");
+    interact
+        .accept_success(
+            token_id, token_nonce, token_amount, offer_id
+        ).await;
+}
+
 
 #[tokio::test]
 async fn test_cancel_offer_not_exists() {

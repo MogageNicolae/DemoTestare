@@ -13,6 +13,7 @@ use std::{
 
 
 const GATEWAY: &str = sdk::gateway::DEVNET_GATEWAY;
+// const GATEWAY: &str = "http://localhost:8085";
 const STATE_FILE: &str = "state.toml";
 const IVAN_ADDRESS: &str = "erd13x29rvmp4qlgn4emgztd8jgvyzdj0p6vn37tqxas3v9mfhq4dy7shalqrx";
 const WANTED_ADDRESS_STRING: &str = "erd1spyavw0956vq68xj8y4tenjpq2wd5a9p2c6j8gsz7ztyrnpxrruqzu66jx";
@@ -361,7 +362,6 @@ impl ContractInteract {
 async fn test_deploy() {
     let mut interact = ContractInteract::new().await;
     interact.deploy().await;
-    
 }
 
 #[tokio::test]
@@ -415,6 +415,7 @@ async fn test_escrow_diff_addresses() {
 #[tokio::test]
 async fn test_escrow_success() {
     let mut interact = ContractInteract::new().await;
+    interact.deploy().await;
     let token_id = String::from(TOKEN_ID);
     let token_nonce = 1u64;
     let token_amount = BigUint::<StaticApi>::from(1u128);
@@ -491,6 +492,7 @@ async fn test_nft_does_not_match() {
             token_id, token_nonce, token_amount, offer_id, expected_error
         ).await;
 }
+
 #[tokio::test]
 async fn test_accept_success() {
     let mut interact = ContractInteract::new().await;
@@ -506,7 +508,6 @@ async fn test_accept_success() {
     ).await;
     println!("Offer id: {}", offer_id); 
 
-    let expected_error = ExpectError(4, "NFT does not match");
     interact
         .accept_success(
             token_id, token_nonce, token_amount, offer_id
